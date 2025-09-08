@@ -1,11 +1,11 @@
 import case_ from 'case';
 import emojiRegex from 'emoji-regex';
-import {find} from 'unist-util-find';
-import {findAllAfter} from 'unist-util-find-all-after';
 import isUrl from 'is-url-superb';
-import {lintRule} from 'unified-lint-rule';
-import {toString} from 'mdast-util-to-string';
-import {visit} from 'unist-util-visit';
+import { toString } from 'mdast-util-to-string';
+import { lintRule } from 'unified-lint-rule';
+import { find } from 'unist-util-find';
+import { findAllAfter } from 'unist-util-find-all-after';
+import { visit } from 'unist-util-visit';
 import identifierAllowList from '../lib/identifier-allow-list.js';
 
 const {of: caseOf} = case_;
@@ -166,72 +166,92 @@ function validateListItemLink(link, file) {
 
 function validateListItemDescription(description, file) {
 	if (description.length === 0) {
-		// In certain, rare cases it's okay to leave off an item's description.
-		return;
+		file.message('List item missing description', description);
+		return false;
 	}
 
-	const prefix = description[0];
-	const suffix = description.at(-1);
-
 	const descriptionText = toString({type: 'root', children: description});
-	const prefixText = toString(prefix);
-	const suffixText = toString(suffix);
-
 	// Check for special-cases with simple descriptions
 	if (validateListItemSpecialCases(description, descriptionText)) {
 		return true;
 	}
 
+	const dash = description[0];
+	const dashText = toString(dash);
+
 	// Ensure description starts with a dash separator or an acceptable special-case
-	if (prefix.type !== 'text' || !validateListItemPrefix(descriptionText, prefixText)) {
-		if (/^[\s\u00A0]-[\s\u00A0]/.test(prefixText)) {
-			file.message('List item link and description separated by invalid whitespace', prefix);
+	if (dash.type !== 'text' || !validateListItemPrefix(descriptionText, dashText)) {
+		if (/^[\s\u00A0]-[\s\u00A0]/.test(dashText)) {
+			file.message('List item link and description separated by invalid whitespace', dash);
 			return false;
 		}
 
 		// Some editors auto-correct ' - ' to – (en-dash). Also avoid — (em-dash).
-		if (/^\s*[/\u{02013}\u{02014}]/u.test(prefixText)) {
-			file.message('List item link and description separated by invalid en-dash or em-dash', prefix);
+		if (/^\s*[/\u{02013}\u{02014}]/u.test(dashText)) {
+			file.message('List item link and description separated by invalid en-dash or em-dash', dash);
 			return false;
 		}
 
-		// Might have image and link on left side before description.
-		// Assume a hyphen with spaces in the description is good enough.
-		if (/ - [A-Z]/.test(descriptionText)) {
-			return true;
+		file.message('List item link and description must be separated with a dash', dash);
+		return false;
+	}
+
+	// Support trailing inlineCode badges after punctuation
+	let lastNonBadgeIndex = description.length - 1;
+	while (lastNonBadgeIndex >= 0 && 
+			(description[lastNonBadgeIndex].type === 'inlineCode' ||
+				(description[lastNonBadgeIndex].type === 'text' && /^\s*$/.test(toString(description[lastNonBadgeIndex])))
+			)) {
+		lastNonBadgeIndex--;
+	}
+	// this would be something like this: [test](#) - `Beta` `Stale`
+	// which should not be allowed
+	if (lastNonBadgeIndex < 0) {
+		file.message('List item description must not consist of only badges', description[0]);
+		return false;
+	}
+
+	// this is the part of the description that is _before_ a badge (if any)
+	const suffixWithoutBadge = description[lastNonBadgeIndex];
+	const suffixWithoutBadgeText = toString(suffixWithoutBadge);
+
+	// Ensure description ends with an acceptable node type (before badges)
+	if (!listItemDescriptionSuffixNodeAllowList.has(suffixWithoutBadge.type)) {
+		file.message('List item description must end with proper punctuation (invalid suffix type)', suffixWithoutBadge);
+		return false;
+	}
+
+	const hasBadges = lastNonBadgeIndex < description.length - 1;
+	const beforeBadges = description.slice(0, lastNonBadgeIndex + 1);
+
+	// Ensure description ends with '.', '!', '?', '…' or an acceptable special-case (before badges)
+	if (suffixWithoutBadge.type === 'text') {
+		let lastSuffixText = toString({type: 'root', children: beforeBadges});
+		if (hasBadges) {
+			// if there are badges, it is fine that the lastSuffixText has spaces on the right side
+			lastSuffixText = lastSuffixText.trimEnd();
 		}
-
-		file.message('List item link and description must be separated with a dash', prefix);
-		return false;
+		if (!validateListItemSuffix(lastSuffixText, suffixWithoutBadgeText)) {
+			file.message('List item description must end with proper punctuation (invalid text suffix)', suffixWithoutBadge);
+			return false;
+		}
 	}
 
-	// Ensure description ends with an acceptable node type
-	if (!listItemDescriptionSuffixNodeAllowList.has(suffix.type)) {
-		file.message('List item description must end with proper punctuation', suffix);
-		return false;
-	}
-
-	// Ensure description ends with '.', '!', '?', '…' or an acceptable special-case
-	if (suffix.type === 'text' && !validateListItemSuffix(descriptionText, suffixText)) {
-		file.message('List item description must end with proper punctuation', suffix);
-		return false;
-	}
-
-	if (prefix === suffix) {
+	if (dash === suffixWithoutBadge) {
 		// Description contains pure text
-		if (!validateListItemPrefixCasing(prefix, file)) {
+		if (!validateListItemPrefixCasing(dash, file)) {
 			return false;
 		}
 	} else {
 		// Description contains mixed node types
-		for (const node of description) {
+		for (const node of beforeBadges) {
 			if (!listItemDescriptionNodeAllowList.has(node.type)) {
 				file.message('List item description contains invalid markdown', node);
 				return false;
 			}
 		}
 
-		if (prefix.length > 3 && !validateListItemPrefixCasing(prefix, file)) {
+		if (dash.length > 3 && !validateListItemPrefixCasing(dash, file)) {
 			return false;
 		}
 	}
