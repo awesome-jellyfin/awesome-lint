@@ -1,22 +1,22 @@
-import {lintRule} from 'unified-lint-rule';
-import {visit} from 'unist-util-visit';
+import { lintRule } from "unified-lint-rule";
+import { visit } from "unist-util-visit";
 
 const badgeUrlAllowList = new Set([
-	'https://awesome.re',
-	'https://github.com/sindresorhus/awesome',
+	"https://awesome.re",
+	"https://github.com/sindresorhus/awesome",
 ]);
 
 const badgeSourceUrlAllowList = new Set([
-	'https://awesome.re/badge.svg',
-	'https://awesome.re/badge-flat.svg',
-	'https://awesome.re/badge-flat2.svg',
+	"https://awesome.re/badge.svg",
+	"https://awesome.re/badge-flat.svg",
+	"https://awesome.re/badge-flat2.svg",
 ]);
 
-const isValidBadgeUrl = url => badgeUrlAllowList.has(url);
-const isValidBadgeSourceUrl = url => badgeSourceUrlAllowList.has(url);
+const isValidBadgeUrl = (url) => badgeUrlAllowList.has(url);
+const isValidBadgeSourceUrl = (url) => badgeSourceUrlAllowList.has(url);
 
-const badgeRule = lintRule('remark-lint:awesome-badge', (ast, file) => {
-	visit(ast, 'heading', (node, index) => {
+const badgeRule = lintRule("remark-lint:awesome-badge", (ast, file) => {
+	visit(ast, "heading", (node, index) => {
 		if (index > 0) {
 			return;
 		}
@@ -24,14 +24,18 @@ const badgeRule = lintRule('remark-lint:awesome-badge', (ast, file) => {
 		let hasBadge = false;
 
 		for (const child of node.children) {
-			if (node.depth !== 1 || child.type !== 'link' || !isValidBadgeUrl(child.url)) {
+			if (
+				node.depth !== 1 ||
+				child.type !== "link" ||
+				!isValidBadgeUrl(child.url)
+			) {
 				continue;
 			}
 
 			for (const child2 of child.children) {
-				if (child2.type === 'image') {
+				if (child2.type === "image") {
 					if (!isValidBadgeSourceUrl(child2.url)) {
-						file.message('Invalid badge source', child2);
+						file.message("Invalid badge source", child2);
 						return;
 					}
 
@@ -41,7 +45,7 @@ const badgeRule = lintRule('remark-lint:awesome-badge', (ast, file) => {
 		}
 
 		if (!hasBadge) {
-			file.message('Missing Awesome badge after the main heading', node);
+			file.message("Missing Awesome badge after the main heading", node);
 		}
 	});
 });

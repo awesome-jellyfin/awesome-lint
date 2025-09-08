@@ -1,6 +1,6 @@
-import lint from '../index.js';
+import lint from "../index.js";
 
-const lintHelper = async options => {
+const lintHelper = async (options) => {
 	const results = await lint(options);
 
 	let list = [];
@@ -8,7 +8,7 @@ const lintHelper = async options => {
 		list = [...list, ...file.messages];
 	}
 
-	return list.map(error => ({
+	return list.map((error) => ({
 		line: error.line,
 		ruleId: error.ruleId,
 		message: error.message,

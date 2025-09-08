@@ -1,68 +1,69 @@
-import {find} from 'unist-util-find';
-import {findAllAfter} from 'unist-util-find-all-after';
-import {findAllBefore} from 'unist-util-find-all-before';
-import findAllBetween from 'unist-util-find-all-between';
-import {lintRule} from 'unified-lint-rule';
-import GitHubSlugger from 'github-slugger';
-import {toString} from 'mdast-util-to-string';
-import {visit} from 'unist-util-visit';
+import { find } from "unist-util-find";
+import { findAllAfter } from "unist-util-find-all-after";
+import { findAllBefore } from "unist-util-find-all-before";
+import findAllBetween from "unist-util-find-all-between";
+import { lintRule } from "unified-lint-rule";
+import GitHubSlugger from "github-slugger";
+import { toString } from "mdast-util-to-string";
+import { visit } from "unist-util-visit";
 
 const slugger = new GitHubSlugger();
 
 const maxListItemDepth = 1;
 
-const sectionHeadingDenylist = new Set([
-	'Contributing',
-	'Footnotes',
-]);
+const sectionHeadingDenylist = new Set(["Contributing", "Footnotes"]);
 
-const tocRule = lintRule('remark-lint:awesome-toc', (ast, file) => {
+const tocRule = lintRule("remark-lint:awesome-toc", (ast, file) => {
 	slugger.reset();
 
 	// Heading links are order-dependent, so it's important to gather them up front
 	const headingLinks = buildHeadingLinks(ast);
 
-	const toc = find(ast, node => (
-		node.type === 'heading'
-		&& node.depth === 2
-		&& toString(node).replaceAll(/<!--.*?-->/g, '').trim() === 'Contents'
-	));
+	const toc = find(
+		ast,
+		(node) =>
+			node.type === "heading" &&
+			node.depth === 2 &&
+			toString(node)
+				.replaceAll(/<!--.*?-->/g, "")
+				.trim() === "Contents",
+	);
 
 	if (!toc) {
-		file.message('Missing or invalid Table of Contents', ast);
+		file.message("Missing or invalid Table of Contents", ast);
 		return;
 	}
 
 	const headingsPre = findAllBefore(ast, toc, {
-		type: 'heading',
+		type: "heading",
 	});
 
 	const htmlPre = findAllBefore(ast, toc, {
-		type: 'html',
+		type: "html",
 	});
 
 	if (headingsPre.length > 1) {
-		file.message('Table of Contents must be the first section', toc);
+		file.message("Table of Contents must be the first section", toc);
 	} else if (headingsPre.length === 0 && htmlPre.length === 0) {
-		file.message('First heading should be name of awesome list', toc);
+		file.message("First heading should be name of awesome list", toc);
 	}
 
 	const headingsPost = findAllAfter(ast, toc, {
-		type: 'heading',
+		type: "heading",
 		depth: 2,
-	}).filter(node => !sectionHeadingDenylist.has(toString(node)));
+	}).filter((node) => !sectionHeadingDenylist.has(toString(node)));
 
 	if (headingsPost.length === 0) {
-		file.message('Missing content headers', ast);
+		file.message("Missing content headers", ast);
 		return;
 	}
 
-	const tocLists = findAllBetween(ast, toc, headingsPost[0], 'list');
+	const tocLists = findAllBetween(ast, toc, headingsPost[0], "list");
 
 	if (tocLists.length === 0) {
-		file.message('Missing or invalid Table of Contents list', toc);
+		file.message("Missing or invalid Table of Contents list", toc);
 	} else if (tocLists.length > 1) {
-		file.message('Multiple Table of Contents lists found', toc);
+		file.message("Multiple Table of Contents lists found", toc);
 	} else {
 		const tocList = tocLists[0];
 
@@ -81,7 +82,7 @@ const tocRule = lintRule('remark-lint:awesome-toc', (ast, file) => {
 function buildHeadingLinks(ast) {
 	const links = {};
 
-	visit(ast, 'heading', node => {
+	visit(ast, "heading", (node) => {
 		const text = toString(node);
 		const slug = slugger.slug(text);
 		const link = `#${slug}`;
@@ -92,20 +93,23 @@ function buildHeadingLinks(ast) {
 	return links;
 }
 
-function validateListItems({ast, file, list, headingLinks, headings, depth}) {
+function validateListItems({ ast, file, list, headingLinks, headings, depth }) {
 	let index = 0;
 
 	if (list) {
 		for (; index < list.children.length; ++index) {
 			const listItem = list.children[index];
-			const link = find(listItem, n => n.type === 'link');
+			const link = find(listItem, (n) => n.type === "link");
 
 			if (!link) {
-				file.message(`ToC item "${index}" missing link "${toString(listItem)}"`, listItem);
+				file.message(
+					`ToC item "${index}" missing link "${toString(listItem)}"`,
+					listItem,
+				);
 				return;
 			}
 
-			const {url} = link;
+			const { url } = link;
 			const text = toString(link);
 			const heading = headings[index];
 			const headingText = heading && toString(heading);
@@ -119,14 +123,20 @@ function validateListItems({ast, file, list, headingLinks, headings, depth}) {
 				if (sectionHeadingDenylist.has(text)) {
 					file.message(`ToC should not contain section "${text}"`, listItem);
 				} else {
-					file.message(`ToC item "${text}" missing corresponding heading`, listItem);
+					file.message(
+						`ToC item "${text}" missing corresponding heading`,
+						listItem,
+					);
 				}
 
 				return;
 			}
 
 			if (text !== headingText) {
-				file.message(`ToC item "${text}" does not match corresponding heading "${headingText}"`, listItem);
+				file.message(
+					`ToC item "${text}" does not match corresponding heading "${headingText}"`,
+					listItem,
+				);
 				return;
 			}
 
@@ -141,22 +151,27 @@ function validateListItems({ast, file, list, headingLinks, headings, depth}) {
 				return;
 			} else {
 				// This link was used previously, so it must be a duplicate
-				file.message(`ToC item "${text}" has duplicate link "${url}"`, listItem);
+				file.message(
+					`ToC item "${text}" has duplicate link "${url}"`,
+					listItem,
+				);
 				return;
 			}
 
-			const subList = find(listItem, n => n.type === 'list');
+			const subList = find(listItem, (n) => n.type === "list");
 
 			if (subList) {
 				if (depth < maxListItemDepth) {
 					const nextHeading = headings[index + 1];
-					const subHeadings = nextHeading ? findAllBetween(ast, heading, nextHeading, {
-						type: 'heading',
-						depth: depth + 3,
-					}) : findAllAfter(ast, heading, {
-						type: 'heading',
-						depth: depth + 3,
-					});
+					const subHeadings = nextHeading
+						? findAllBetween(ast, heading, nextHeading, {
+								type: "heading",
+								depth: depth + 3,
+							})
+						: findAllAfter(ast, heading, {
+								type: "heading",
+								depth: depth + 3,
+							});
 
 					validateListItems({
 						ast,
